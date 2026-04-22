@@ -14,14 +14,12 @@ jobs:
           sudo apt-get update
           sudo apt install -y curl wget git build-essential zip bc libssl-dev bison flex libelf-dev libgnutls28-dev python3 python3-dev
           mkdir -p $GITHUB_WORKSPACE/work
-          # Trik Symlink Python agar tidak error di Ubuntu terbaru
           sudo ln -sf /usr/bin/python3 /usr/bin/python
           sudo ln -sf /usr/bin/python3 /usr/bin/python2
 
       - name: Download Toolchains
         run: |
           cd $GITHUB_WORKSPACE/work
-          # Menggunakan LineageOS Toolchain (Clang r416183b & GCC 4.9)
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
@@ -29,32 +27,26 @@ jobs:
       - name: Clone Source
         run: |
           cd $GITHUB_WORKSPACE/work
-          # Otomatis clone repo Naomix tempat workflow ini berada
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} -b ${{ github.ref_name }} android-kernel --depth=1
 
       - name: Build Kernel
         run: |
           cd $GITHUB_WORKSPACE/work/android-kernel
           
-          # Setup Environment Path
           CLANG=$GITHUB_WORKSPACE/work/clang/bin
           GCC64=$GITHUB_WORKSPACE/work/gcc64/bin
           GCC32=$GITHUB_WORKSPACE/work/gcc32/bin
           export PATH=$CLANG:$GCC64:$GCC32:$PATH
           
-          # Konfigurasi defconfig untuk Merlin/Laurus
           export KCONFIG=merlin_defconfig
           
-          # Bersihkan lingkungan build
           make O=out ARCH=arm64 clean
           make O=out ARCH=arm64 mrproper
-          
-          # Load defconfig
           make O=out ARCH=arm64 $KCONFIG
           
-          # Kompilasi Utama
-          # KCFLAGS="-w" digunakan untuk mengabaikan warning yang sering bikin Error 2
-          # LLVM_IAS=0 digunakan agar memakai assembler GCC (lebih stabil untuk 4.14)
+          # PERBAIKAN UTAMA:
+          # Kita pakai LD=aarch64-linux-android-ld agar tidak error di vmlinux (mtk-vcu)
+          # Kita matikan LLVM_IAS agar lebih stabil
           make -j$(nproc --all) O=out \
               ARCH=arm64 \
               CC=clang \
@@ -63,7 +55,7 @@ jobs:
               CROSS_COMPILE_ARM32=arm-linux-androideabi- \
               HOSTCC=gcc \
               HOSTCXX=g++ \
-              LD=ld.lld \
+              LD=aarch64-linux-android-ld \
               AR=llvm-ar \
               NM=llvm-nm \
               OBJCOPY=llvm-objcopy \
@@ -77,17 +69,15 @@ jobs:
           cd $GITHUB_WORKSPACE/work
           git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
           
-          # Mencari file Image hasil build
           IMAGE=$(find android-kernel/out/arch/arm64/boot -name "Image.gz*" -type f | head -n 1)
           
           if [ -f "$IMAGE" ]; then
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
-            # Sesuaikan nama device di AnyKernel3
             sed -i 's/device.name1=maguro/device.name1=merlin/g' anykernel.sh
             zip -r9 "../Naomix-Kernel-Final.zip" *
           else
-            echo "Build gagal, file kernel (Image) tidak ditemukan!"
+            echo "Build gagal, Image tidak ditemukan!"
             exit 1
           fi
 
