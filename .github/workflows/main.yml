@@ -19,7 +19,7 @@ jobs:
       - name: Download Toolchains
         run: |
           cd $GITHUB_WORKSPACE/work
-          # Pakai Clang & GCC yang sudah terbukti untuk MediaTek 4.14
+          # Download Clang dan GCC 4.9 sebagai pembantu
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
@@ -29,28 +29,35 @@ jobs:
           cd $GITHUB_WORKSPACE/work
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} -b ${{ github.ref_name }} android-kernel --depth=1
 
-      - name: Patch & Build
+      - name: Build Kernel
         run: |
           cd $GITHUB_WORKSPACE/work/android-kernel
           
-          # Setup Path
+          # Setup PATH
           export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
           
-          # JURUS ANTI-STUCK & ANTI-ERROR:
-          # Kita paksa matikan stack protector di defconfig agar tidak butuh simbol 'stpcpy' atau 'stack_chk_fail'
+          # Bersihkan total agar tidak ada sisa error relocation tadi
+          make O=out ARCH=arm64 clean
+          make O=out ARCH=arm64 mrproper
+          
+          # Load Config
           make O=out ARCH=arm64 merlin_defconfig
+          
+          # PATCH SAKTI: Matikan Stack Protector agar tidak error 'stpcpy' dan 'stack_chk_fail'
+          # Ini solusi buat kernel 4.14 yang rewel pake Clang baru
           sed -i 's/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/g' out/.config
           sed -i 's/CONFIG_CC_STACKPROTECTOR=y/# CONFIG_CC_STACKPROTECTOR is not set/g' out/.config
           
-          # Eksekusi Build dengan Hybrid Clang-GCC
-          # LDFLAGS ditambahkan untuk mengabaikan fungsi ganda di MediaTek VCU/GPU
+          # EKSEKUSI FINAL:
+          # Pakai LD=ld.lld (Linker Clang) untuk fix error 'relocation truncated'
+          # Pakai LDFLAGS untuk fix 'multiple definition' di driver MediaTek
           make -j$(nproc --all) O=out \
               ARCH=arm64 \
               CC=clang \
               CLANG_TRIPLE=aarch64-linux-gnu- \
               CROSS_COMPILE=aarch64-linux-android- \
               CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-              LD=aarch64-linux-android-ld \
+              LD=ld.lld \
               AR=llvm-ar \
               NM=llvm-nm \
               OBJCOPY=llvm-objcopy \
@@ -64,14 +71,18 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/work
           git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
+          
+          # Cari file Image.gz atau Image.gz-dtb
           IMAGE=$(find android-kernel/out/arch/arm64/boot -name "Image.gz*" -type f | head -n 1)
+          
           if [ -f "$IMAGE" ]; then
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
+            # Ganti device name jadi merlin
             sed -i 's/device.name1=maguro/device.name1=merlin/g' anykernel.sh
             zip -r9 "../Naomix-Kernel-Final.zip" *
           else
-            echo "Jika masih gagal, log ini akan membantu diagnosa besok pagi."
+            echo "Build gagal, file Image tidak ditemukan!"
             exit 1
           fi
 
