@@ -19,9 +19,7 @@ jobs:
       - name: Download Toolchains
         run: |
           cd $GITHUB_WORKSPACE/work
-          # Download Clang (Proton Clang atau sejenisnya lebih stabil, tapi kita pakai Lineage dulu)
-          git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
-          # Download GCC untuk menambal kekurangan Clang
+          # Download GCC 4.9 (Stable for MT6768)
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
 
@@ -30,36 +28,26 @@ jobs:
           cd $GITHUB_WORKSPACE/work
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} -b ${{ github.ref_name }} android-kernel --depth=1
 
-      - name: Build Kernel
+      - name: Patch & Build
         run: |
           cd $GITHUB_WORKSPACE/work/android-kernel
           
-          # Setup Path
-          export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
+          # JURUS ANTI-ERROR STPCPY: 
+          # Kita paksa compiler tidak menggunakan builtin stpcpy yang bikin vmlinux error
+          sed -i 's/KBUILD_CFLAGS   += -fno-strict-aliasing/KBUILD_CFLAGS   += -fno-strict-aliasing -fno-builtin-stpcpy/g' Makefile
           
+          export PATH=$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
           export KCONFIG=merlin_defconfig
           
-          # Bersihkan sisa-sisa build sebelumnya agar tidak bentrok
           make O=out ARCH=arm64 clean
           make O=out ARCH=arm64 mrproper
-          
-          # Konfigurasi
           make O=out ARCH=arm64 $KCONFIG
           
-          # EKSEKUSI FINAL:
-          # Kita pakai Clang tapi biarkan Linker dan Assembler ditangani GCC agar tidak ada "multiple definition"
+          # Build menggunakan Full GCC agar stabil di bagian Driver GPU dan VCU
           make -j$(nproc --all) O=out \
               ARCH=arm64 \
-              CC=clang \
-              CLANG_TRIPLE=aarch64-linux-gnu- \
               CROSS_COMPILE=aarch64-linux-android- \
               CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-              LD=aarch64-linux-android-ld \
-              AR=aarch64-linux-android-ar \
-              NM=aarch64-linux-android-nm \
-              OBJCOPY=aarch64-linux-android-objcopy \
-              OBJDUMP=aarch64-linux-android-objdump \
-              STRIP=aarch64-linux-android-strip \
               KCFLAGS="-w"
 
       - name: Package AnyKernel3
@@ -73,7 +61,7 @@ jobs:
             sed -i 's/device.name1=maguro/device.name1=merlin/g' anykernel.sh
             zip -r9 "../Naomix-Kernel-Final.zip" *
           else
-            echo "Aduhh, masih gagal! Cek log build-nya lagi nanti ya."
+            echo "Masih belum tembus, periksa log build-nya besok."
             exit 1
           fi
 
