@@ -33,8 +33,7 @@ jobs:
           cd $GITHUB_WORKSPACE/work/android-kernel
           export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
           
-          # GANTI NAMA KERNEL DI SOURCE (Agar muncul di Settings > About Phone)
-          # Kita ubah CONFIG_LOCALVERSION di defconfig
+          # Branding: Ganti nama ke Handwarmer agar diplomatis
           sed -i 's/CONFIG_LOCALVERSION="-NaomixBang+"/CONFIG_LOCALVERSION="-Handwarmer"/g' arch/arm64/configs/merlin_defconfig
           
           make O=out ARCH=arm64 clean
@@ -69,35 +68,20 @@ jobs:
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
             
-            # --- LOG INSTALASI DIPLOMATIS ---
-            cat <<'EOF' > anykernel.sh
-properties() { '
-kernel.string=Handwarmer Kernel
-do.devicecheck=1
-do.modules=0
-do.systemless=1
-do.cleanup=1
-do.cleanuponabort=0
-device.name1=merlin
-device.name2=lancelot
-'; }
-block=/dev/block/by-name/boot;
-is_slot_device=0;
-ramdisk_compression=auto;
-patch_vbmeta_flag=auto;
-. tools/ak3-core.sh;
-ui_print "------------------------------";
-ui_print " Handwarmer Kernel for Merlin ";
-ui_print " Source Owner: Doism ";
-ui_print " Compiled by: ${{ github.actor }} ";
-ui_print "------------------------------";
-split_boot;
-flash_boot;
-flash_dtbo;
-EOF
-            sed -i 's/\r$//' anykernel.sh
+            # --- TULIS ANYKERNEL.SH TANPA DRAMA EOF ---
+            printf "properties() { '\nkernel.string=Handwarmer Kernel\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\n" > anykernel.sh
+            printf "block=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n" >> anykernel.sh
+            printf ". tools/ak3-core.sh;\n" >> anykernel.sh
+            printf "ui_print \"------------------------------\";\n" >> anykernel.sh
+            printf "ui_print \" Handwarmer Kernel for Merlin \";\n" >> anykernel.sh
+            printf "ui_print \" Source Owner: Doism \";\n" >> anykernel.sh
+            printf "ui_print \" Compiled by: kitsunednm \";\n" >> anykernel.sh
+            printf "ui_print \"------------------------------\";\n" >> anykernel.sh
+            printf "split_boot;\nflash_boot;\nflash_dtbo;\n" >> anykernel.sh
+            
             zip -r9 "../Handwarmer-Kernel-Merlin.zip" *
           else
+            echo "Gagal: Image tidak ditemukan!"
             exit 1
           fi
 
