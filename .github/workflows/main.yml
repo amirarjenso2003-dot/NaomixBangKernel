@@ -1,48 +1,26 @@
-name: Handwarmer Kernel Compiler
-on:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt install -y curl wget git build-essential zip bc libssl-dev bison flex libelf-dev libgnutls28-dev python3 python3-dev
-          mkdir -p $GITHUB_WORKSPACE/work
-          sudo ln -sf /usr/bin/python3 /usr/bin/python
-
-      - name: Download Toolchains
-        run: |
-          cd $GITHUB_WORKSPACE/work
-          git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
-          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
-          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
-
-      - name: Clone Source
-        run: |
-          cd $GITHUB_WORKSPACE/work
-          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} -b ${{ github.ref_name }} android-kernel --depth=1
-
-      - name: Build Kernel
+- name: Build Kernel
         run: |
           cd $GITHUB_WORKSPACE/work/android-kernel
           export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
           
-          # Branding: Ganti nama ke Handwarmer agar diplomatis
-          sed -i 's/CONFIG_LOCALVERSION="-NaomixBang+"/CONFIG_LOCALVERSION="-Handwarmer"/g' arch/arm64/configs/merlin_defconfig
-          
+          # Bersihkan total
           make O=out ARCH=arm64 clean
           make O=out ARCH=arm64 mrproper
           make O=out ARCH=arm64 merlin_defconfig
           
-          sed -i 's/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/g' out/.config
-          sed -i 's/CONFIG_CC_STACKPROTECTOR=y/# CONFIG_CC_STACKPROTECTOR is not set/g' out/.config
+          # --- FIX WIFI & BLUETOOTH (THE MAGIC TOUCH) ---
+          # 1. Pastikan nama kernel tidak terlalu asing bagi driver vendor
+          # Kita pakai nama yang agak mirip tapi tetap ada branding kamu
+          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-Handwarmer-kitsune"/g' out/.config
           
+          # 2. Matikan proteksi yang bikin driver Wi-Fi (blob) nolak buat load
+          sed -i 's/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/g' out/.config
+          
+          # 3. Paksa agar modul Wi-Fi/BT mau load meski vermagic beda sedikit
+          echo "CONFIG_MODULE_FORCE_LOAD=y" >> out/.config
+          echo "CONFIG_MODVERSIONS=y" >> out/.config
+          
+          # Jalankan Build
           make -j$(nproc --all) O=out \
               ARCH=arm64 \
               CC=clang \
@@ -68,25 +46,16 @@ jobs:
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
             
-            # --- TULIS ANYKERNEL.SH TANPA DRAMA EOF ---
-            printf "properties() { '\nkernel.string=Handwarmer Kernel\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\n" > anykernel.sh
+            # Script installer tetap pakai nama Kitsunednm & Doism
+            printf "properties() { '\nkernel.string=Handwarmer V2 (Fix WiFi)\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\n" > anykernel.sh
             printf "block=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n" >> anykernel.sh
             printf ". tools/ak3-core.sh;\n" >> anykernel.sh
             printf "ui_print \"------------------------------\";\n" >> anykernel.sh
-            printf "ui_print \" Handwarmer Kernel for Merlin \";\n" >> anykernel.sh
+            printf "ui_print \" Handwarmer Kernel V2 \";\n" >> anykernel.sh
+            printf "ui_print \" WiFi & BT Fix Edition \";\n" >> anykernel.sh
             printf "ui_print \" Source Owner: Doism \";\n" >> anykernel.sh
             printf "ui_print \" Compiled by: kitsunednm \";\n" >> anykernel.sh
             printf "ui_print \"------------------------------\";\n" >> anykernel.sh
             printf "split_boot;\nflash_boot;\nflash_dtbo;\n" >> anykernel.sh
             
-            zip -r9 "../Handwarmer-Kernel-Merlin.zip" *
-          else
-            echo "Gagal: Image tidak ditemukan!"
-            exit 1
-          fi
-
-      - name: Upload Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: Handwarmer-Kernel-Merlin
-          path: work/Handwarmer-Kernel-Merlin.zip
+            zip -r9 "../Handwarmer-V2-Fix-WiFi.zip" *
