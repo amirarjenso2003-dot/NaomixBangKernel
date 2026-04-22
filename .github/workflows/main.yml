@@ -19,7 +19,7 @@ jobs:
       - name: Download Toolchains
         run: |
           cd $GITHUB_WORKSPACE/work
-          # Clang r416183b + GCC 4.9 untuk Merlin
+          # Toolchain Clang & GCC khusus untuk kernel Merlin (MT6768)
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
@@ -34,15 +34,18 @@ jobs:
           cd $GITHUB_WORKSPACE/work/android-kernel
           export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
           
+          # Bersihkan sisa build lama
           make O=out ARCH=arm64 clean
           make O=out ARCH=arm64 mrproper
+          
+          # Load konfigurasi Merlin
           make O=out ARCH=arm64 merlin_defconfig
           
-          # Fix error stpcpy/strcpy dengan mematikan Stack Protector
+          # Matikan Stack Protector agar tidak kena error 'stpcpy'
           sed -i 's/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/g' out/.config
           sed -i 's/CONFIG_CC_STACKPROTECTOR=y/# CONFIG_CC_STACKPROTECTOR is not set/g' out/.config
           
-          # Eksekusi dengan LLD Linker untuk fix relocation error
+          # Eksekusi kompilasi dengan Linker LLD
           make -j$(nproc --all) O=out \
               ARCH=arm64 \
               CC=clang \
@@ -70,52 +73,50 @@ jobs:
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
             
-            # --- OVERWRITE ANYKERNEL.SH (CARA NUKLIR) ---
-            # Kita buat ulang file anykernel.sh agar jalurnya 100% benar untuk MediaTek
+            # --- CARA NUKLIR: OVERWRITE ANYKERNEL.SH ---
+            # Catatan: EOF di bawah ini WAJIB mentok ke kiri tanpa spasi
             cat <<EOF > anykernel.sh
-            # AnyKernel3 Ramdisk Mod Script
-            # osm0sis @ xda-developers
+# AnyKernel3 Ramdisk Mod Script
+# osm0sis @ xda-developers
 
-            properties() { '
-            kernel.string=Naomix Kernel for Merlin
-            do.devicecheck=1
-            do.modules=0
-            do.systemless=1
-            do.cleanup=1
-            do.cleanuponabort=0
-            device.name1=merlin
-            device.name2=lancelot
-            device.name3=galahad
-            device.name4=
-            device.name5=
-            supported.versions=
-            supported.patchlevels=
-            '; }
+properties() { '
+kernel.string=Naomix Kernel for Merlin
+do.devicecheck=1
+do.modules=0
+do.systemless=1
+do.cleanup=1
+do.cleanuponabort=0
+device.name1=merlin
+device.name2=lancelot
+device.name3=galahad
+device.name4=
+device.name5=
+supported.versions=
+supported.patchlevels=
+'; }
 
-            # Boot block setup
-            # Langsung paksa ke jalur MediaTek by-name
-            block=/dev/block/by-name/boot;
-            is_slot_device=0;
-            ramdisk_compression=auto;
-            patch_vbmeta_flag=auto;
+# Boot block setup (Forced to MediaTek path)
+block=/dev/block/by-name/boot;
+is_slot_device=0;
+ramdisk_compression=auto;
+patch_vbmeta_flag=auto;
 
-            ## AnyKernel methods (do not edit)
-            # load shell library
-            . tools/ak3-core.sh;
+## AnyKernel methods (do not edit)
+. tools/ak3-core.sh;
 
-            ## AnyKernel install
-            ui_print "------------------------------";
-            ui_print " Compiled by: ${{ github.actor }} ";
-            ui_print " Built on GitHub Actions ";
-            ui_print "------------------------------";
-            
-            split_boot;
-            flash_boot;
-            flash_dtbo;
-            ## end install
-            EOF
+## AnyKernel install
+ui_print "------------------------------";
+ui_print " Compiled by: ${{ github.actor }} ";
+ui_print " Built on GitHub Actions ";
+ui_print "------------------------------";
 
-            # Bersihkan line ending Windows agar tidak error di TWRP
+split_boot;
+flash_boot;
+flash_dtbo;
+## end install
+EOF
+
+            # Bersihkan line ending Windows (CRLF) agar jadi format Unix
             sed -i 's/\r$//' anykernel.sh
             
             zip -r9 "../Kernel-Merlin-SuperFix.zip" *
