@@ -33,28 +33,26 @@ jobs:
           cd $GITHUB_WORKSPACE/work/android-kernel
           export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
           
-          # FIX: Paksa Makefile utama melarang stpcpy sebelum mulai
+          # Fix stpcpy error
           sed -i 's/^KBUILD_CFLAGS   :=/KBUILD_CFLAGS   := -fno-builtin-stpcpy -fno-builtin-strcpy /' Makefile
           
           make O=out ARCH=arm64 clean
           make O=out ARCH=arm64 mrproper
           make O=out ARCH=arm64 merlin_defconfig
           
-          # --- STABILITY SYNC (V6) ---
-          # Kembalikan LOCALVERSION ke nama asli agar driver WLAN/BT vendor mau jalan
+          # --- STABILITY SYNC (V7) ---
           sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-NaomixBang+"/g' out/.config
-          
-          # Tambahkan fitur krusial untuk kestabilan driver MediaTek
           echo "CONFIG_KPROBES=y" >> out/.config
-          echo "CONFIG_STACKPROTECTOR=y" >> out/.config
-          echo "CONFIG_STACKPROTECTOR_STRONG=y" >> out/.config
           echo "CONFIG_MODULE_FORCE_LOAD=y" >> out/.config
           echo "CONFIG_MODVERSIONS=y" >> out/.config
           
-          # Jawab otomatis konfigurasi baru agar tidak Error 1
+          # Fix Reboot issue on lockscreen
+          sed -i 's/CONFIG_SLUB_DEBUG=y/# CONFIG_SLUB_DEBUG is not set/g' out/.config
+          sed -i 's/CONFIG_PANIC_ON_RECURSIVE_FAULT=y/# CONFIG_PANIC_ON_RECURSIVE_FAULT is not set/g' out/.config
+          echo "CONFIG_DEBUG_PREEMPT=n" >> out/.config
+          
           make O=out ARCH=arm64 olddefconfig
           
-          # Jalankan Kompilasi
           make -j$(nproc --all) O=out ARCH=arm64 \
               CC=clang \
               CLANG_TRIPLE=aarch64-linux-gnu- \
@@ -78,16 +76,14 @@ jobs:
           if [ -f "$IMAGE" ]; then
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
-            # Script AnyKernel dengan identitas Kitsunednm & Doism
-            printf "properties() { '\nkernel.string=Handwarmer V6 STABLE\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V6 \";\nui_print \" WiFi & Stability FIXED \";\nui_print \" Source Owner: Doism \";\nui_print \" Compiled by: kitsunednm \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
-            zip -r9 "../Handwarmer-V6-FIXED.zip" *
+            printf "properties() { '\nkernel.string=Handwarmer V7 FINAL\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V7 \";\nui_print \" NO MORE REBOOTS! \";\nui_print \" Source Owner: Doism \";\nui_print \" Compiled by: kitsunednm \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
+            zip -r9 "../Handwarmer-V7-FINAL.zip" *
           else
-            echo "Gagal: Kernel Image tidak ditemukan!"
             exit 1
           fi
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Handwarmer-V6-FIXED
-          path: work/Handwarmer-V6-FIXED.zip
+          name: Handwarmer-V7-FINAL
+          path: work/Handwarmer-V7-FINAL.zip
