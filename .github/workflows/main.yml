@@ -20,6 +20,7 @@ jobs:
       - name: Download Toolchains
         run: |
           cd $GITHUB_WORKSPACE/work
+          # Clang & GCC Toolchains
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
@@ -44,9 +45,7 @@ jobs:
           make O=out ARCH=arm64 mrproper
           make O=out ARCH=arm64 $KCONFIG
           
-          # PERBAIKAN UTAMA:
-          # Kita pakai LD=aarch64-linux-android-ld agar tidak error di vmlinux (mtk-vcu)
-          # Kita matikan LLVM_IAS agar lebih stabil
+          # KONFIGURASI HYBRID (LLVM TOOLS + GCC LD)
           make -j$(nproc --all) O=out \
               ARCH=arm64 \
               CC=clang \
@@ -61,28 +60,8 @@ jobs:
               OBJCOPY=llvm-objcopy \
               OBJDUMP=llvm-objdump \
               STRIP=llvm-strip \
+              READELF=llvm-readelf \
+              OBJSIZE=llvm-size \
+              LLVM=1 \
               LLVM_IAS=0 \
               KCFLAGS="-w"
-
-      - name: Package AnyKernel3
-        run: |
-          cd $GITHUB_WORKSPACE/work
-          git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
-          
-          IMAGE=$(find android-kernel/out/arch/arm64/boot -name "Image.gz*" -type f | head -n 1)
-          
-          if [ -f "$IMAGE" ]; then
-            cp "$IMAGE" AnyKernel3/
-            cd AnyKernel3
-            sed -i 's/device.name1=maguro/device.name1=merlin/g' anykernel.sh
-            zip -r9 "../Naomix-Kernel-Final.zip" *
-          else
-            echo "Build gagal, Image tidak ditemukan!"
-            exit 1
-          fi
-
-      - name: Upload Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: Naomix-Kernel-Flashable
-          path: work/Naomix-Kernel-Final.zip
