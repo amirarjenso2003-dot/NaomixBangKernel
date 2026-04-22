@@ -61,39 +61,38 @@ jobs:
           if [ -f "$IMAGE" ]; then
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
-            cat <<EOF > anykernel.sh
-properties() { '
-kernel.string=Naomix Kernel for Merlin
-do.devicecheck=1
-do.modules=0
-do.systemless=1
-do.cleanup=1
-do.cleanuponabort=0
-device.name1=merlin
-device.name2=lancelot
-device.name3=galahad
-'; }
-block=/dev/block/by-name/boot;
-is_slot_device=0;
-ramdisk_compression=auto;
-patch_vbmeta_flag=auto;
-. tools/ak3-core.sh;
-ui_print "------------------------------";
-ui_print " Compiled by: ${{ github.actor }} ";
-ui_print " Built on GitHub Actions ";
-ui_print "------------------------------";
-split_boot;
-flash_boot;
-flash_dtbo;
-EOF
-            sed -i 's/\r$//' anykernel.sh
-            zip -r9 "../Kernel-Merlin-SuperFix.zip" *
+            
+            # Buat file anykernel.sh pakai echo biar gak ngerusak indentasi YAML
+            echo "properties() { '" > anykernel.sh
+            echo "kernel.string=Naomix Kernel for Merlin" >> anykernel.sh
+            echo "do.devicecheck=1" >> anykernel.sh
+            echo "do.modules=0" >> anykernel.sh
+            echo "do.systemless=1" >> anykernel.sh
+            echo "do.cleanup=1" >> anykernel.sh
+            echo "device.name1=merlin" >> anykernel.sh
+            echo "device.name2=lancelot" >> anykernel.sh
+            echo "'; }" >> anykernel.sh
+            echo "block=/dev/block/by-name/boot;" >> anykernel.sh
+            echo "is_slot_device=0;" >> anykernel.sh
+            echo "ramdisk_compression=auto;" >> anykernel.sh
+            echo "patch_vbmeta_flag=auto;" >> anykernel.sh
+            echo ". tools/ak3-core.sh;" >> anykernel.sh
+            echo "ui_print \"------------------------------\";" >> anykernel.sh
+            echo "ui_print \" Compiled by: ${{ github.actor }} \";" >> anykernel.sh
+            echo "ui_print \" Built on GitHub Actions \";" >> anykernel.sh
+            echo "ui_print \"------------------------------\";" >> anykernel.sh
+            echo "split_boot;" >> anykernel.sh
+            echo "flash_boot;" >> anykernel.sh
+            echo "flash_dtbo;" >> anykernel.sh
+            
+            zip -r9 "../Kernel-Merlin-Fixed.zip" *
           else
+            echo "Image not found!"
             exit 1
           fi
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-Merlin-SuperFix
-          path: work/Kernel-Merlin-SuperFix.zip
+          name: Kernel-Merlin-Fixed
+          path: work/Kernel-Merlin-Fixed.zip
