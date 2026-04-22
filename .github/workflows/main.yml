@@ -12,13 +12,13 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt install -y curl wget git build-essential zip bc libssl-dev bison flex libelf-dev libgnutls28-dev
+          sudo apt install -y curl wget git build-essential zip bc libssl-dev bison flex libelf-dev libgnutls28-dev python2 python3
           mkdir -p $GITHUB_WORKSPACE/work
 
       - name: Download Toolchains
         run: |
           cd $GITHUB_WORKSPACE/work
-          # Menggunakan LineageOS Clang r416183b yang stabil untuk kernel 4.14
+          # Clang r416183b & GCC 4.9 LineageOS
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
@@ -26,61 +26,65 @@ jobs:
       - name: Clone Source
         run: |
           cd $GITHUB_WORKSPACE/work
-          # Otomatis clone repo kamu sendiri menggunakan token internal GitHub
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} -b ${{ github.ref_name }} android-kernel --depth=1
 
       - name: Build Kernel
         run: |
           cd $GITHUB_WORKSPACE/work/android-kernel
           
-          # Setup Toolchain Path
-          export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
+          # Lokasi Toolchain
+          CLANG=$GITHUB_WORKSPACE/work/clang/bin
+          GCC64=$GITHUB_WORKSPACE/work/gcc64/bin
+          GCC32=$GITHUB_WORKSPACE/work/gcc32/bin
           
-          # Berdasarkan repo kamu, defconfig yang digunakan adalah merlin_defconfig
+          # PATH: Prioritaskan GCC AOSP agar script pengecekan versi tidak error
+          export PATH=$GCC64:$GCC32:$CLANG:$PATH
+          
+          # Nama defconfig dari repo kamu
           export KCONFIG=merlin_defconfig
           
+          # 1. Bersihkan lingkungan
           make O=out ARCH=arm64 clean
           make O=out ARCH=arm64 mrproper
+          
+          # 2. Buat Config
           make O=out ARCH=arm64 $KCONFIG
           
-          # Proses Kompilasi
+          # 3. Kompilasi (Tanpa LLVM=1 dulu untuk stabilitas awal)
           make -j$(nproc --all) O=out \
               ARCH=arm64 \
               CC=clang \
               CLANG_TRIPLE=aarch64-linux-gnu- \
               CROSS_COMPILE=aarch64-linux-android- \
               CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+              HOSTCC=gcc \
+              HOSTCXX=g++ \
               LD=ld.lld \
               AR=llvm-ar \
               NM=llvm-nm \
               OBJCOPY=llvm-objcopy \
               OBJDUMP=llvm-objdump \
-              STRIP=llvm-strip \
-              HOSTCC=gcc \
-              HOSTCXX=g++ \
-              LLVM=1 \
-              LLVM_IAS=1
+              STRIP=llvm-strip
 
       - name: Package AnyKernel3
         run: |
           cd $GITHUB_WORKSPACE/work
           git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
           
-          # Mencari file hasil build secara otomatis
-          if [ -f android-kernel/out/arch/arm64/boot/Image.gz-dtb ]; then
-            cp android-kernel/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          elif [ -f android-kernel/out/arch/arm64/boot/Image.gz ]; then
-            cp android-kernel/out/arch/arm64/boot/Image.gz AnyKernel3/
-          elif [ -f android-kernel/out/arch/arm64/boot/Image ]; then
-            cp android-kernel/out/arch/arm64/boot/Image AnyKernel3/
-          fi
+          # Cari file Image secara rekursif di folder out
+          IMAGE=$(find android-kernel/out/arch/arm64/boot -name "Image.gz*" -type f | head -n 1)
           
-          cd AnyKernel3
-          # Mengatur nama perangkat ke merlin (bisa diganti jika perlu)
-          sed -i 's/device.name1=maguro/device.name1=merlin/g' anykernel.sh
-          zip -r9 "../Naomix-Kernel-Final.zip" *
+          if [ -f "$IMAGE" ]; then
+            cp "$IMAGE" AnyKernel3/
+            cd AnyKernel3
+            sed -i 's/device.name1=maguro/device.name1=merlin/g' anykernel.sh
+            zip -r9 "../Naomix-Kernel-Final.zip" *
+          else
+            echo "Build gagal, Image tidak ditemukan!"
+            exit 1
+          fi
 
-      - name: Upload Result
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: Naomix-Kernel-Result
