@@ -22,8 +22,8 @@ jobs:
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
-
-      - - name: Download Source Naomix
+          
+      - name: Download Source Naomix
         run: |
           cd $GITHUB_WORKSPACE/work
           # Baris di bawah ini sudah ditambahkan token akses otomatis
