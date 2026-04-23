@@ -1,4 +1,4 @@
-name: Handwarmer Kernel V16 - Final Stability + KSU
+name: Handwarmer Kernel V19 - Nusantara Legacy
 on:
   workflow_dispatch:
 
@@ -19,7 +19,7 @@ jobs:
       - name: Download Toolchains
         run: |
           cd $GITHUB_WORKSPACE/work
-          # Menggunakan Clang r416183b (Stabil untuk KSU 1.0.8)
+          # Clang r416183b adalah standar emas untuk kestabilan KSU di Merlin
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
@@ -29,55 +29,66 @@ jobs:
           cd $GITHUB_WORKSPACE/work
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} -b ${{ github.ref_name }} android-kernel --depth=1
           
-          # INTEGRASI KERNELSU 1.0.8 (Official Setup)
+          # INTEGRASI KERNELSU 1.0.8 OFFICIAL
           cd android-kernel
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-      - name: Build Kernel
+      - name: Build Kernel (Nusantara Blueprint)
         run: |
           cd $GITHUB_WORKSPACE/work/android-kernel
           export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
           
-          # Fix stpcpy & strcpy
+          # Fix compiler errors
           sed -i 's/^KBUILD_CFLAGS   :=/KBUILD_CFLAGS   := -fno-builtin-stpcpy -fno-builtin-strcpy /' Makefile
           
           make O=out ARCH=arm64 clean
           make O=out ARCH=arm64 mrproper
           make O=out ARCH=arm64 merlin_defconfig
           
-          # --- PERBAIKAN V16 (MENGIKUTI BLUEPRINT DOISSM) ---
+          # --- FINAL STABILITY RECONSTRUCTION (V19) ---
           
           # 1. Identitas Lokal
           sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-NaomixBang+"/g' out/.config
           
-          # 2. Fix Sleep Death (Kunci agar tidak Restart saat Layar Off)
-          # Kita matikan MTK_CPUIDLE karena sering menyebabkan 'stuck' pada GCE MediaTek
-          echo "CONFIG_MTK_CPUIDLE=n" >> out/.config
-          echo "CONFIG_MTK_SMART_LPM=n" >> out/.config
+          # 2. Power Management & Deep Sleep (Mirroring Nusantara boot.img)
+          echo "CONFIG_SUSPEND=y" >> out/.config
+          echo "CONFIG_PM_AUTOSLEEP=y" >> out/.config
+          echo "CONFIG_MTK_CPUIDLE=y" >> out/.config
+          echo "CONFIG_MTK_IDLE_LPM_VOLTAGE_CONTROL=y" >> out/.config
           echo "CONFIG_ARM_CPUIDLE=y" >> out/.config
+          echo "CONFIG_MTK_SMART_LPM=n" >> out/.config
           
-          # 3. Jinakkan Watchdog secara Total (Rahasia doissM)
-          # Kita izinkan driver 'telat' tanpa memicu reboot
-          echo "CONFIG_MTK_WD_KICKER=y" >> out/.config
-          echo "CONFIG_MTK_WATCHDOG_REBOOT_LEVEL=0" >> out/.config
-          echo "CONFIG_LOCKUP_DETECTOR=n" >> out/.config
-          echo "CONFIG_DETECT_HUNG_TASK=n" >> out/.config
+          # 3. Display & Graphics Pipeline Fix
+          echo "CONFIG_MTK_GCE_SUPPORT=y" >> out/.config
+          echo "CONFIG_MTK_FENCE_WAIT=n" >> out/.config
+          echo "CONFIG_MTK_FB_WAIT_FOR_VSYNC_SUPPORT=y" >> out/.config
+          echo "CONFIG_DRM_PANEL_ORIENTATION_QUIRKS=y" >> out/.config
           
-          # 4. Aktifkan KernelSU 1.0.8
+          # 4. KernelSU 1.0.8 Config
           echo "CONFIG_KSU=y" >> out/.config
           echo "CONFIG_KSU_DEBUG=n" >> out/.config
           
-          # 5. Fix Display Pipeline (Berdasarkan log Composer error)
-          echo "CONFIG_MTK_GCE_SUPPORT=y" >> out/.config
-          echo "CONFIG_MTK_FENCE_WAIT=y" >> out/.config
+          # 5. Storage Optimization (F2FS Nusantara Style)
+          echo "CONFIG_F2FS_FS_XATTR=y" >> out/.config
+          echo "CONFIG_F2FS_FS_POSIX_ACL=y" >> out/.config
+          echo "CONFIG_F2FS_CHECK_FS=y" >> out/.config
+          echo "CONFIG_F2FS_FS_COMPRESSION=y" >> out/.config
           
-          # 6. Panic Control
+          # 6. Watchdog & Panic (The Safety Net)
+          echo "CONFIG_MTK_WD_KICKER=y" >> out/.config
+          echo "CONFIG_MTK_WATCHDOG_REBOOT_LEVEL=0" >> out/.config
           echo "CONFIG_PANIC_TIMEOUT=0" >> out/.config
           echo "CONFIG_PANIC_ON_OOPS=n" >> out/.config
           
+          # 7. SELinux Enforcing Compliance
+          echo "CONFIG_SECURITY_SELINUX=y" >> out/.config
+          echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> out/.config
+          echo "CONFIG_SECURITY_SELINUX_BOOTPARAM=y" >> out/.config
+          
+          # Apply Config
           make O=out ARCH=arm64 olddefconfig
           
-          # Kompilasi
+          # Start Compilation
           make -j$(nproc --all) O=out ARCH=arm64 \
               CC=clang \
               CLANG_TRIPLE=aarch64-linux-gnu- \
@@ -101,9 +112,8 @@ jobs:
           if [ -f "$IMAGE" ]; then
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
-            # Script AnyKernel3 dengan Mode Enforcing
-            printf "properties() { '\nkernel.string=Handwarmer V16-KSU\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V16 \";\nui_print \" Stability & KSU 1.0.8 \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
-            zip -r9 "../Handwarmer-V16-Final.zip" *
+            printf "properties() { '\nkernel.string=Handwarmer V19 Legacy\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V19 \";\nui_print \" Nusantara Project Base \";\nui_print \" Included: KernelSU 1.0.8 \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
+            zip -r9 "../Handwarmer-V19-Nusantara.zip" *
           else
             exit 1
           fi
@@ -111,5 +121,5 @@ jobs:
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Handwarmer-V16-Final
-          path: work/Handwarmer-V16-Final.zip
+          name: Handwarmer-V19-Final
+          path: work/Handwarmer-V19-Nusantara.zip
