@@ -1,4 +1,4 @@
-name: Handwarmer Kernel V12 Sleep Fix
+name: Handwarmer Kernel V13 DeepSleep Fix
 on:
   workflow_dispatch:
 
@@ -40,34 +40,37 @@ jobs:
           make O=out ARCH=arm64 mrproper
           make O=out ARCH=arm64 merlin_defconfig
           
-          # --- PERBAIKAN V12 (FIX MATI SAAT KUNCI LAYAR) ---
+          # --- PERBAIKAN V13 (BRIDGE TO DEEP SLEEP) ---
           
           # 1. Identitas Nama
           sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-NaomixBang+"/g' out/.config
           
-          # 2. Power Management (Agar Deep Sleep lancar)
+          # 2. Power Management & Sleep Fix
           echo "CONFIG_SUSPEND=y" >> out/.config
-          echo "CONFIG_PM_SLEEP=y" >> out/.config
           echo "CONFIG_PM_AUTOSLEEP=y" >> out/.config
           echo "CONFIG_PM_WAKELOCKS=y" >> out/.config
+          echo "CONFIG_PM_DEBUG=y" >> out/.config
           
-          # 3. Disable Watchdog & Lockup Detector (Penyebab utama restart pas layar mati)
+          # 3. CPU Idle & Hotplug (Penting agar Core tidak panic saat layar mati)
+          echo "CONFIG_CPU_IDLE=y" >> out/.config
+          echo "CONFIG_ARM_CPUIDLE=y" >> out/.config
+          echo "CONFIG_CPU_IDLE_GOV_MENU=y" >> out/.config
+          echo "CONFIG_HOTPLUG_CPU=y" >> out/.config
+          
+          # 4. Longgarkan Watchdog (Delay 1 detik agar driver sempat 'tidur')
           echo "CONFIG_MTK_WD_KICKER=y" >> out/.config
           echo "CONFIG_MTK_WATCHDOG_REBOOT_LEVEL=0" >> out/.config
           echo "CONFIG_LOCKUP_DETECTOR=n" >> out/.config
-          echo "CONFIG_DETECT_HUNG_TASK=n" >> out/.config
           
-          # 4. Fix Backlight LMU (Mencegah panic saat layar redup ke mati)
-          echo "CONFIG_LEDS_TI_LMU_COMMON=y" >> out/.config
-          echo "CONFIG_BACKLIGHT_CLASS_DEVICE=y" >> out/.config
+          # 5. Fix Display Writeback (Sering jadi penyebab hang saat layar off)
+          echo "CONFIG_FB_MSM_MDSS_WRITEBACK=y" >> out/.config
           
-          # 5. Keamanan & Panic Control
+          # 6. Panic & Security
           echo "CONFIG_PANIC_TIMEOUT=0" >> out/.config
           echo "CONFIG_PANIC_ON_OOPS=n" >> out/.config
           echo "CONFIG_SECURITY_SELINUX=y" >> out/.config
           echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> out/.config
           
-          # Sinkronisasi config
           make O=out ARCH=arm64 olddefconfig
           
           # Kompilasi
@@ -94,15 +97,14 @@ jobs:
           if [ -f "$IMAGE" ]; then
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
-            printf "properties() { '\nkernel.string=Handwarmer V12 SleepFix\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V12 \";\nui_print \" Status: Sleep Fix \";\nui_print \" Compiled by: kitsunednm \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
-            zip -r9 "../Handwarmer-V12-Final.zip" *
+            printf "properties() { '\nkernel.string=Handwarmer V13 StableSleep\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V13 \";\nui_print \" Target: Sleep Stability \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
+            zip -r9 "../Handwarmer-V13-Final.zip" *
           else
-            echo "Gagal: Image.gz tidak ditemukan!"
             exit 1
           fi
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Handwarmer-V12-Final
-          path: work/Handwarmer-V12-Final.zip
+          name: Handwarmer-V13-Final
+          path: work/Handwarmer-V13-Final.zip
