@@ -1,4 +1,4 @@
-name: Handwarmer Kernel V14 CoreStability
+name: Handwarmer Kernel V16 - Final Stability + KSU
 on:
   workflow_dispatch:
 
@@ -19,56 +19,61 @@ jobs:
       - name: Download Toolchains
         run: |
           cd $GITHUB_WORKSPACE/work
+          # Menggunakan Clang r416183b (Stabil untuk KSU 1.0.8)
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
 
-      - name: Clone Source
+      - name: Clone Source & Integrate KernelSU
         run: |
           cd $GITHUB_WORKSPACE/work
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} -b ${{ github.ref_name }} android-kernel --depth=1
+          
+          # INTEGRASI KERNELSU 1.0.8 (Official Setup)
+          cd android-kernel
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
       - name: Build Kernel
         run: |
           cd $GITHUB_WORKSPACE/work/android-kernel
           export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
           
-          # Fix stpcpy error
+          # Fix stpcpy & strcpy
           sed -i 's/^KBUILD_CFLAGS   :=/KBUILD_CFLAGS   := -fno-builtin-stpcpy -fno-builtin-strcpy /' Makefile
           
           make O=out ARCH=arm64 clean
           make O=out ARCH=arm64 mrproper
           make O=out ARCH=arm64 merlin_defconfig
           
-          # --- PERBAIKAN V14 (ANTI-RESTART EARLY BOOT) ---
+          # --- PERBAIKAN V16 (MENGIKUTI BLUEPRINT DOISSM) ---
           
-          # 1. Identitas Nama
+          # 1. Identitas Lokal
           sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-NaomixBang+"/g' out/.config
           
-          # 2. Matikan Total Watchdog & Lockup (Agar tidak restart paksa)
-          echo "CONFIG_MTK_WD_KICKER=n" >> out/.config
-          echo "# CONFIG_MTK_WD_KICKER is not set" >> out/.config
+          # 2. Fix Sleep Death (Kunci agar tidak Restart saat Layar Off)
+          # Kita matikan MTK_CPUIDLE karena sering menyebabkan 'stuck' pada GCE MediaTek
+          echo "CONFIG_MTK_CPUIDLE=n" >> out/.config
+          echo "CONFIG_MTK_SMART_LPM=n" >> out/.config
+          echo "CONFIG_ARM_CPUIDLE=y" >> out/.config
+          
+          # 3. Jinakkan Watchdog secara Total (Rahasia doissM)
+          # Kita izinkan driver 'telat' tanpa memicu reboot
+          echo "CONFIG_MTK_WD_KICKER=y" >> out/.config
+          echo "CONFIG_MTK_WATCHDOG_REBOOT_LEVEL=0" >> out/.config
           echo "CONFIG_LOCKUP_DETECTOR=n" >> out/.config
           echo "CONFIG_DETECT_HUNG_TASK=n" >> out/.config
           
-          # 3. CMDLINE Fix (Paksa SELinux Enforcing + Disable WDT)
-          # Kita kembalikan Enforcing karena V11-V12 sudah bisa homescreen pakai ini
-          sed -i 's/CONFIG_CMDLINE=.*/CONFIG_CMDLINE="androidboot.selinux=enforcing mtk_wdt.disable_wdt_restart=1"/g' out/.config
+          # 4. Aktifkan KernelSU 1.0.8
+          echo "CONFIG_KSU=y" >> out/.config
+          echo "CONFIG_KSU_DEBUG=n" >> out/.config
           
-          # 4. Power Management (Standard)
-          echo "CONFIG_SUSPEND=y" >> out/.config
-          echo "CONFIG_PM_AUTOSLEEP=y" >> out/.config
-          echo "CONFIG_PM_WAKELOCKS=y" >> out/.config
+          # 5. Fix Display Pipeline (Berdasarkan log Composer error)
+          echo "CONFIG_MTK_GCE_SUPPORT=y" >> out/.config
+          echo "CONFIG_MTK_FENCE_WAIT=y" >> out/.config
           
-          # 5. Fix ZRAM & Memory (Biar lancar masuk homescreen)
-          echo "CONFIG_ZRAM=y" >> out/.config
-          echo "CONFIG_ZSmalloc=y" >> out/.config
-          
-          # 6. Security & Panic
+          # 6. Panic Control
           echo "CONFIG_PANIC_TIMEOUT=0" >> out/.config
           echo "CONFIG_PANIC_ON_OOPS=n" >> out/.config
-          echo "CONFIG_SECURITY_SELINUX=y" >> out/.config
-          echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> out/.config
           
           make O=out ARCH=arm64 olddefconfig
           
@@ -96,8 +101,9 @@ jobs:
           if [ -f "$IMAGE" ]; then
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
-            printf "properties() { '\nkernel.string=Handwarmer V14 CoreStable\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V14 \";\nui_print \" Status: Core Stability \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
-            zip -r9 "../Handwarmer-V14-Final.zip" *
+            # Script AnyKernel3 dengan Mode Enforcing
+            printf "properties() { '\nkernel.string=Handwarmer V16-KSU\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V16 \";\nui_print \" Stability & KSU 1.0.8 \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
+            zip -r9 "../Handwarmer-V16-Final.zip" *
           else
             exit 1
           fi
@@ -105,5 +111,5 @@ jobs:
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Handwarmer-V14-Final
-          path: work/Handwarmer-V14-Final.zip
+          name: Handwarmer-V16-Final
+          path: work/Handwarmer-V16-Final.zip
