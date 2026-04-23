@@ -40,19 +40,24 @@ jobs:
           make O=out ARCH=arm64 mrproper
           make O=out ARCH=arm64 merlin_defconfig
           
-          # --- STABILITY SYNC (V7) ---
+          # --- KOTAK HITAM & STABILITAS (V8) ---
           sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-NaomixBang+"/g' out/.config
-          echo "CONFIG_KPROBES=y" >> out/.config
-          echo "CONFIG_MODULE_FORCE_LOAD=y" >> out/.config
-          echo "CONFIG_MODVERSIONS=y" >> out/.config
           
-          # Fix Reboot issue on lockscreen
+          # Aktifkan fitur Pstore/RAM Console agar log pingsan tersimpan
+          echo "CONFIG_PSTORE=y" >> out/.config
+          echo "CONFIG_PSTORE_CONSOLE=y" >> out/.config
+          echo "CONFIG_PSTORE_RAM=y" >> out/.config
+          echo "CONFIG_ANDROID_RAM_CONSOLE=y" >> out/.config
+          
+          # Stability Fix (Kprobes & Debugging)
+          echo "CONFIG_KPROBES=y" >> out/.config
           sed -i 's/CONFIG_SLUB_DEBUG=y/# CONFIG_SLUB_DEBUG is not set/g' out/.config
-          sed -i 's/CONFIG_PANIC_ON_RECURSIVE_FAULT=y/# CONFIG_PANIC_ON_RECURSIVE_FAULT is not set/g' out/.config
           echo "CONFIG_DEBUG_PREEMPT=n" >> out/.config
           
+          # Jawab otomatis config baru
           make O=out ARCH=arm64 olddefconfig
           
+          # Jalankan Kompilasi
           make -j$(nproc --all) O=out ARCH=arm64 \
               CC=clang \
               CLANG_TRIPLE=aarch64-linux-gnu- \
@@ -76,8 +81,8 @@ jobs:
           if [ -f "$IMAGE" ]; then
             cp "$IMAGE" AnyKernel3/
             cd AnyKernel3
-            printf "properties() { '\nkernel.string=Handwarmer V7 FINAL\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V7 \";\nui_print \" NO MORE REBOOTS! \";\nui_print \" Source Owner: Doism \";\nui_print \" Compiled by: kitsunednm \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
-            zip -r9 "../Handwarmer-V7-FINAL.zip" *
+            printf "properties() { '\nkernel.string=Handwarmer V8 Blackbox\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V8 \";\nui_print \" Blackbox (Pstore) Active \";\nui_print \" Source Owner: Doism \";\nui_print \" Compiled by: kitsunednm \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
+            zip -r9 "../Handwarmer-V8-Blackbox.zip" *
           else
             exit 1
           fi
@@ -85,5 +90,5 @@ jobs:
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Handwarmer-V7-FINAL
-          path: work/Handwarmer-V7-FINAL.zip
+          name: Handwarmer-V8-Blackbox
+          path: work/Handwarmer-V8-Blackbox.zip
