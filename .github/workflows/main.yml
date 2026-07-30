@@ -20,18 +20,18 @@ jobs:
       run: |
         mkdir -p clang
         cd clang
-        curl -LOs https://googlesource.com
+        curl -LOs https://googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r487747c.tar.gz
         tar -xzf clang-r487747c.tar.gz
         rm -rf clang-r487747c.tar.gz
         cd ..
 
     - name: Download AOSP GCC 64-bit
       run: |
-        git clone --depth=1 https://googlesource.com gcc64
+        git clone --depth=1 https://googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 gcc64
 
     - name: Download AOSP GCC 32-bit
       run: |
-        git clone --depth=1 https://googlesource.com gcc32
+        git clone --depth=1 https://googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 gcc32
 
     - name: Compile Kernel Source
       run: |
