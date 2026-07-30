@@ -1,116 +1,64 @@
-name: Handwarmer Kernel V21 - No KSU - Stability Legacy
+name: Build Kernel Handwarmer
+
 on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-kernel:
+    name: Build Kernel by amirarjenso
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt install -y curl wget git build-essential zip bc libssl-dev bison flex libelf-dev libgnutls28-dev python3 python3-dev
-          mkdir -p $GITHUB_WORKSPACE/work
-          sudo ln -sf /usr/bin/python3 /usr/bin/python
+    - name: Install Build Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.1-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3
 
-      - name: Download Toolchains
-        run: |
-          cd $GITHUB_WORKSPACE/work
-          # Menggunakan Clang r416183b untuk stabilitas maksimal pada chipset MediaTek
-          git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b -b lineage-20.0 clang --depth=1
-          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 -b lineage-19.1 gcc64 --depth=1
-          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 -b lineage-19.1 gcc32 --depth=1
+    - name: Download AOSP Clang 17
+      run: |
+        mkdir -y clang
+        cd clang
+        curl -LOs https://googlesource.com
+        tar -xzf clang-r487747c.tar.gz
+        rm -rf clang-r487747c.tar.gz
+        cd ..
 
-      - name: Clone Source
-        run: |
-          cd $GITHUB_WORKSPACE/work
-          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} -b ${{ github.ref_name }} android-kernel --depth=1
+    - name: Download AOSP GCC 64-bit
+      run: |
+        git clone --depth=1 https://googlesource.com gcc64
 
-      - name: Build Kernel (Nusantara DNA + Stability Fix)
-        run: |
-          cd $GITHUB_WORKSPACE/work/android-kernel
-          export PATH=$GITHUB_WORKSPACE/work/clang/bin:$GITHUB_WORKSPACE/work/gcc64/bin:$GITHUB_WORKSPACE/work/gcc32/bin:$PATH
-          
-          # Fix compiler errors (stpcpy/strcpy)
-          sed -i 's/^KBUILD_CFLAGS   :=/KBUILD_CFLAGS   := -fno-builtin-stpcpy -fno-builtin-strcpy /' Makefile
-          
-          make O=out ARCH=arm64 clean
-          make O=out ARCH=arm64 mrproper
-          make O=out ARCH=arm64 merlin_defconfig
-          
-          # --- FINAL STABILITY RECONSTRUCTION (V21) ---
-          
-          # 1. Identitas Lokal
-          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-Handwarmer-V21-Legacy"/g' out/.config
-          
-          # 2. Perbaikan Backlight & I2C (Berdasarkan analisis last_kmsg: AALMain Freeze Fix)
-          echo "CONFIG_LEDS_TI_LMU_COMMON=y" >> out/.config
-          echo "CONFIG_MTK_I2C_EXT_SUPPORT=y" >> out/.config
-          echo "CONFIG_MTK_BACKLIGHT_REDUCE_FLOOD=y" >> out/.config
-          
-          # 3. Power Management (Deep Sleep Fix - Mirroring Nusantara)
-          echo "CONFIG_MTK_CPUIDLE=y" >> out/.config
-          echo "CONFIG_MTK_IDLE_LPM_VOLTAGE_CONTROL=y" >> out/.config
-          echo "CONFIG_ARM_CPUIDLE=y" >> out/.config
-          echo "CONFIG_MTK_SMART_LPM=n" >> out/.config
-          
-          # 4. Display Pipeline (GCE & Fence Relax agar tidak Timeout)
-          echo "CONFIG_MTK_GCE_SUPPORT=y" >> out/.config
-          echo "CONFIG_MTK_FENCE_WAIT=n" >> out/.config
-          echo "CONFIG_MTK_FB_WAIT_FOR_VSYNC_SUPPORT=y" >> out/.config
-          
-          # 5. Watchdog & Panic (Anti-Auto Restart)
-          echo "CONFIG_MTK_WD_KICKER=y" >> out/.config
-          echo "CONFIG_MTK_WATCHDOG_REBOOT_LEVEL=0" >> out/.config
-          echo "CONFIG_PANIC_TIMEOUT=0" >> out/.config
-          echo "CONFIG_PANIC_ON_OOPS=n" >> out/.config
-          
-          # 6. Storage & Performance (Nusantara Optimization)
-          echo "CONFIG_F2FS_FS_XATTR=y" >> out/.config
-          echo "CONFIG_F2FS_CHECK_FS=y" >> out/.config
-          
-          # NO KSU: CONFIG_KSU tidak ditambahkan (Clean Build)
-          
-          # Apply Config
-          make O=out ARCH=arm64 olddefconfig
-          
-          # Start Compilation
-          make -j$(nproc --all) O=out ARCH=arm64 \
-              CC=clang \
-              CLANG_TRIPLE=aarch64-linux-gnu- \
-              CROSS_COMPILE=aarch64-linux-android- \
-              CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-              LD=ld.lld \
-              AR=llvm-ar \
-              NM=llvm-nm \
-              OBJCOPY=llvm-objcopy \
-              OBJDUMP=llvm-objdump \
-              STRIP=llvm-strip \
-              LLVM_IAS=0 \
-              KCFLAGS="-w" \
-              LDFLAGS="--allow-multiple-definition"
+    - name: Download AOSP GCC 32-bit
+      run: |
+        git clone --depth=1 https://googlesource.com gcc32
 
-      - name: Package AnyKernel3 (Flashable Zip)
-        run: |
-          cd $GITHUB_WORKSPACE/work
-          git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
-          IMAGE=$(find android-kernel/out/arch/arm64/boot -name "Image.gz*" -type f | head -n 1)
-          if [ -f "$IMAGE" ]; then
-            cp "$IMAGE" AnyKernel3/
-            cd AnyKernel3
-            # Script instalasi AnyKernel3
-            printf "properties() { '\nkernel.string=Handwarmer V21-Legacy\ndo.devicecheck=1\ndo.modules=0\ndo.systemless=1\ndo.cleanup=1\ndo.cleanuponabort=0\ndevice.name1=merlin\ndevice.name2=lancelot\n'; }\nblock=/dev/block/by-name/boot;\nis_slot_device=0;\nramdisk_compression=auto;\npatch_vbmeta_flag=auto;\n. tools/ak3-core.sh;\nui_print \"------------------------------\";\nui_print \" Handwarmer Kernel V21 \";\nui_print \" Nusantara Project Base \";\nui_print \" Fix: Power & Backlight \";\nui_print \" Status: No-KSU Edition \";\nui_print \"------------------------------\";\nsplit_boot;\nflash_boot;\nflash_dtbo;\n" > anykernel.sh
-            zip -r9 "../Handwarmer-V21-Flashable.zip" *
-          else
-            echo "Error: Kernel Image (Image.gz) tidak ditemukan!"
-            exit 1
-          fi
+    - name: Compile Kernel Source
+      run: |
+        export PATH="$(pwd)/clang/bin:$(pwd)/gcc64/bin:$(pwd)/gcc32/bin:$PATH"
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export HEADER_ARCH=arm64
+        
+        make O=out merlin_defconfig
+        make -j$(nproc --all) O=out \
+                      CC=clang \
+                      CLANG_TRIPLE=aarch64-linux-gnu- \
+                      CROSS_COMPILE=aarch64-linux-android- \
+                      CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
-      - name: Upload Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: Handwarmer-V21-Artifact
-          path: work/Handwarmer-V21-Flashable.zip
+    - name: Package with AnyKernel3
+      run: |
+        git clone --depth=1 https://github.com AnyKernel3
+        cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/ 2>/dev/null || cp out/arch/arm64/boot/Image AnyKernel3/
+        cd AnyKernel3
+        # Mengubah nama kernel menjadi handwarmer di script zip
+        sed -i 's/kernel.string=.*/kernel.string=handwarmer by amirarjenso/' anykernel.sh
+        zip -r9 ../handwarmer-kernel.zip *
+        cd ..
+
+    - name: Upload Handwarmer Kernel Zip
+      uses: actions/upload-artifact@v4
+      with:
+        name: handwarmer-kernel-release
+        path: handwarmer-kernel.zip
